@@ -2,6 +2,8 @@
 import os
 import logging
 import asyncio
+import aiofiles
+import aiofiles.os
 from typing import Any, Dict, Optional
 
 import yaml
@@ -23,18 +25,34 @@ class ProviderResponse(BaseModel):
     msg: str
     data: Optional[Dict] = None
 
-def _provider_path(provider: str) -> str:
+
+async def _provider_path(provider: str) -> str:
     rel = Model_Providers.get(provider)
     if not rel:
         raise ManuScriptValidationMsg(
             msg=f"Unsupported provider: {provider}",
             code=ResponseCode.CLIENT_ERROR.value,
         )
-    return os.path.join(ROOT_DIR, rel.replace("/", os.sep))
+    
+    # 构建完整的配置文件路径（确保指向文件，不是目录）
+    config_path = os.path.join(ROOT_DIR, rel.replace("/", os.sep))
+    
+    # 创建父目录（如果不存在）
+    parent_dir = os.path.dirname(config_path)
+    if not await aiofiles.os.path.exists(parent_dir):
+        await aiofiles.os.makedirs(parent_dir, exist_ok=True)
+    
+    # 如果配置文件不存在，创建一个空的
+    if not await aiofiles.os.path.exists(config_path):
+        async with aiofiles.open(config_path, "w", encoding="utf-8") as f:
+            await f.write("api_key: xxxxxx")
+    
+    return config_path
 
 
 async def _load_yaml(path: str) -> Dict[str, Any]:
-    if not os.path.exists(path):
+    exists = await asyncio.to_thread(os.path.exists, path)
+    if not exists:
         return {}
 
     def _read() -> Dict[str, Any]:
@@ -58,11 +76,14 @@ async def _save_yaml(path: str, data: Dict[str, Any]) -> None:
 
     await asyncio.to_thread(_write)
 
+
 class GetProviderConfigRequest(BaseModel):
     provider: str
+
+
 @router.post("/get", response_model=ProviderResponse)
 async def get_provider_config_endpoint(payload: GetProviderConfigRequest):
-    path = _provider_path(payload.provider)
+    path = await _provider_path(payload.provider)
     cfg = await _load_yaml(path)
     return ProviderResponse(
         code=ResponseCode.SUCCESS.value,
@@ -70,9 +91,12 @@ async def get_provider_config_endpoint(payload: GetProviderConfigRequest):
         data={"provider": payload.provider, "config": cfg, "path": path},
     )
 
+
 class UpdateProviderConfigRequest(BaseModel):
     provider: str
-    values: Dict[str, Any]  # 局部更新（merge），仅覆盖传入字段
+    values: Dict[str, Any]
+
+
 @router.post("/update", response_model=ProviderResponse)
 async def update_provider_config_endpoint(payload: UpdateProviderConfigRequest):
     if not payload.values:
@@ -80,13 +104,11 @@ async def update_provider_config_endpoint(payload: UpdateProviderConfigRequest):
             msg="No values to update",
             code=ResponseCode.CLIENT_ERROR.value,
         )
-    path = _provider_path(payload.provider)
+    path = await _provider_path(payload.provider)
     before = await _load_yaml(path)
-    # 合并更新（浅合并）
     after = {**before, **payload.values}
     await _save_yaml(path, after)
     logger.info("Provider config updated: %s, keys=%s", payload.provider, list(payload.values.keys()))
-    # 返回更新后的配置
     cfg = await _load_yaml(path)
     return ProviderResponse(
         code=ResponseCode.SUCCESS.value,
