@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 import sys
 import os
 from fastapi import FastAPI
@@ -14,6 +15,16 @@ def setup_logging() -> None:
     handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(name)s - %(message)s"))
     root.addHandler(handler)
 
+from db.sqlite import init_db
+
+@asynccontextmanager
+async def app_lifespan(app: FastAPI):
+    # 应用启动前
+    init_db()  # 数据库初始化，例如建表
+    yield
+    # 应用关闭后
+    
+
 def create_app() -> FastAPI:
     """创建 FastAPI 实例并挂载中间件。"""
     app = FastAPI(
@@ -22,9 +33,10 @@ def create_app() -> FastAPI:
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=app_lifespan
     )
 
-    # 开放跨域（起步阶段，生产建议收敛域名）
+    # 开放跨域
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -39,9 +51,21 @@ def register_routers(app: FastAPI) -> None:
     env = os.getenv("APP_ENV", "dev")
     api_base = "/api"  
 
-    # Demo 路由（用于联通性测试）
-    from routers.demo.interface import router as demo_router
-    app.include_router(demo_router, prefix=f"{api_base}/demo", tags=["Demo"])
+    # health 路由（测试服务响应）
+    from routers.health.interface import router as demo_router
+    app.include_router(demo_router, prefix=f"{api_base}/health", tags=["health"])
+
+    # novel 路由
+    from routers.novel.novel import router as novel_router
+    app.include_router(novel_router, prefix=f"{api_base}/novel", tags=["novel"])
+
+    # chapter 路由
+    from routers.chapter.chapter import router as chapter_router
+    app.include_router(chapter_router, prefix=f"{api_base}/chapter", tags=["chapter"])
+
+    # character 路由
+    from routers.character.character import router as character_router
+    app.include_router(character_router, prefix=f"{api_base}/character", tags=["character"])
 
 # 实例化应用并注册路由
 setup_logging()
