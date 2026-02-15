@@ -1,54 +1,75 @@
 # db/CRUD/chapter_crud.py
 import uuid
-from db.sqlite import get_connection
+import sqlite3
+from typing import List, Optional
+
+import aiosqlite
+from db.sqlite import DB_FILE
 from db.models.chapter import Chapter
-from typing import Optional, Dict
 
-def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str) -> str:
-    conn = get_connection()
-    cur = conn.cursor()
+
+async def _connect() -> aiosqlite.Connection:
+    conn = await aiosqlite.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    await conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+async def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str) -> str:
     uid = str(uuid.uuid4())
-    cur.execute(
-        "INSERT INTO Chapters (uid, novel_uid, chapter_idx, title, content) VALUES (?, ?, ?, ?, ?)",
-        (uid, novel_uid, chapter_idx, title, content)
-    )
-    conn.commit()
-    conn.close()
-    return uid
+    conn = await _connect()
+    try:
+        await conn.execute(
+            "INSERT INTO Chapters (uid, novel_uid, chapter_idx, title, content) VALUES (?, ?, ?, ?, ?)",
+            (uid, novel_uid, chapter_idx, title, content),
+        )
+        await conn.commit()
+        return uid
+    finally:
+        await conn.close()
 
-def get_chapter(ch_uid: str) -> Chapter | None:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM Chapters WHERE uid=?", (ch_uid,))
-    row = cur.fetchone()
-    conn.close()
-    return Chapter(**row) if row else None
 
-def list_chapters(novel_uid: str) -> list[Chapter]:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM Chapters WHERE novel_uid=? ORDER BY chapter_idx", (novel_uid,))
-    rows = cur.fetchall()
-    conn.close()
-    return [Chapter(**r) for r in rows]
+async def get_chapter(ch_uid: str) -> Optional[Chapter]:
+    conn = await _connect()
+    try:
+        cur = await conn.execute("SELECT * FROM Chapters WHERE uid=?", (ch_uid,))
+        row = await cur.fetchone()
+        return Chapter(**row) if row else None
+    finally:
+        await conn.close()
 
-def update_chapter(uid: str, title: str, content: str) -> bool:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "UPDATE Chapters SET title=?, content=? WHERE uid=?",
-        (title, content, uid)
-    )
-    conn.commit()
-    updated = cur.rowcount
-    conn.close()
-    return updated > 0
 
-def delete_chapter(uid: str) -> bool:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM Chapters WHERE uid=?", (uid,))
-    conn.commit()
-    deleted = cur.rowcount
-    conn.close()
-    return deleted > 0
+async def list_chapters(novel_uid: str) -> List[Chapter]:
+    conn = await _connect()
+    try:
+        cur = await conn.execute(
+            "SELECT * FROM Chapters WHERE novel_uid=? ORDER BY chapter_idx",
+            (novel_uid,),
+        )
+        rows = await cur.fetchall()
+        return [Chapter(**r) for r in rows]
+    finally:
+        await conn.close()
+
+
+async def update_chapter(uid: str, title: str, content: str) -> bool:
+    conn = await _connect()
+    try:
+        cur = await conn.execute(
+            "UPDATE Chapters SET title=?, content=? WHERE uid=?",
+            (title, content, uid),
+        )
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()
+
+
+async def delete_chapter(uid: str) -> bool:
+    conn = await _connect()
+    try:
+        cur = await conn.execute("DELETE FROM Chapters WHERE uid=?", (uid,))
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()

@@ -1,54 +1,72 @@
 # db/CRUD/novel_crud.py
 import uuid
-from db.sqlite import get_connection
+import sqlite3
+from typing import Optional, List
+
+import aiosqlite
+from db.sqlite import DB_FILE
 from db.models.novel import Novel
 
-def create_novel(title: str, genre: str, description: str) -> str:
-    conn = get_connection()
-    cur = conn.cursor()
+
+async def _connect() -> aiosqlite.Connection:
+    conn = await aiosqlite.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    await conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+async def create_novel(title: str, genre: str, description: str) -> str:
     uid = str(uuid.uuid4())
-    cur.execute(
-        "INSERT INTO NovelConfig (uid, title, genre, description) VALUES (?, ?, ?, ?)",
-        (uid, title, genre, description)
-    )
-    conn.commit()
-    conn.close()
-    return uid
+    conn = await _connect()
+    try:
+        await conn.execute(
+            "INSERT INTO NovelConfig (uid, title, genre, description) VALUES (?, ?, ?, ?)",
+            (uid, title, genre, description),
+        )
+        await conn.commit()
+        return uid
+    finally:
+        await conn.close()
 
-def get_novel(novel_uid: str) -> Novel | None:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM NovelConfig WHERE uid=?", (novel_uid,))
-    row = cur.fetchone()
-    conn.close()
-    return Novel(**row) if row else None
 
-def list_novels() -> list[Novel]:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM NovelConfig")
-    rows = cur.fetchall()
-    conn.close()
-    return [Novel(**r) for r in rows]
+async def get_novel(novel_uid: str) -> Optional[Novel]:
+    conn = await _connect()
+    try:
+        cur = await conn.execute("SELECT * FROM NovelConfig WHERE uid=?", (novel_uid,))
+        row = await cur.fetchone()
+        return Novel(**row) if row else None
+    finally:
+        await conn.close()
 
-def update_novel(novel_uid: str, title: str, genre: str, description: str) -> bool:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-       UPDATE NovelConfig 
-       SET title=?, genre=?, description=? 
-       WHERE uid=?
-    """, (title, genre, description, novel_uid))
-    conn.commit()
-    updated = cur.rowcount
-    conn.close()
-    return updated > 0
 
-def delete_novel(novel_uid: str) -> bool:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("DELETE FROM NovelConfig WHERE uid=?", (novel_uid,))
-    conn.commit()
-    deleted = cur.rowcount
-    conn.close()
-    return deleted > 0
+async def list_novels() -> List[Novel]:
+    conn = await _connect()
+    try:
+        cur = await conn.execute("SELECT * FROM NovelConfig")
+        rows = await cur.fetchall()
+        return [Novel(**r) for r in rows]
+    finally:
+        await conn.close()
+
+
+async def update_novel(novel_uid: str, title: str, genre: str, description: str) -> bool:
+    conn = await _connect()
+    try:
+        cur = await conn.execute(
+            "UPDATE NovelConfig SET title=?, genre=?, description=? WHERE uid=?",
+            (title, genre, description, novel_uid),
+        )
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()
+
+
+async def delete_novel(novel_uid: str) -> bool:
+    conn = await _connect()
+    try:
+        cur = await conn.execute("DELETE FROM NovelConfig WHERE uid=?", (novel_uid,))
+        await conn.commit()
+        return cur.rowcount > 0
+    finally:
+        await conn.close()
