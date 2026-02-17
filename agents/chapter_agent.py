@@ -353,7 +353,7 @@ class ChapterAgent:
 
         char_info = self._characters_to_compact_dicts(all_characters)
         instructions = (
-            "你是一名专业小说写作代笔作者。请根据给定的章节标题、该章概述、所有人物信息，以及前后章节的概括（若有）创作本章正文。\n"
+            "你是一名专业小说写作代笔作者。请根据给定的章节标题、该章概述、所有人物信息，以及前后章节的概括（若有）创作本章正文内容。\n"
             "要求：\n"
             "1) 采用叙事文本，不要输出标题、小节标题、或任何额外标记；\n"
             "2) 内容要具体生动，描写人物行为、心理和对话，避免空泛总结；\n"
@@ -384,13 +384,21 @@ class ChapterAgent:
 
         # 如果传入 conversation_messages（多轮），则直接使用它，否则构造 system+user 单轮
         if conversation_messages:
-            messages = conversation_messages
-        else:
-            messages = [
-                {"role": "system", "content": instructions},
-                {"role": "user", "content": prompt}
+            if conversation_messages:
+                # 将messages里第一个元素的content替换为instructions+user_payload里的信息拼接而成的新content，保持role不变
+                # 复制以避免修改调用方数据；构造合并后的 system 内容并确保位于首位
+                messages = list(conversation_messages)
+                system_content = instructions + "\n\n" + json.dumps(user_payload, ensure_ascii=False)
+                if messages and messages[0].get("role") == "system":
+                    messages[0] = {"role": "system", "content": system_content}
+                else:
+                    messages.insert(0, {"role": "system", "content": system_content})
+            else:
+                messages = [
+                    {"role": "system", "content": instructions},
+                    {"role": "user", "content": prompt}
             ]
-
+        print("流式入参 messages:", json.dumps(messages, ensure_ascii=False))
         # 使用 adapter 的流式接口，传入 messages
         content = await self.adapter.stream_text(on_token=on_token, messages=messages)
         return content.strip()

@@ -8,7 +8,7 @@ import asyncio
 
 from db.CRUD.novel_crud import get_novel, update_latest_chapter_uid
 from db.CRUD.character_crud import create_character, list_characters
-from db.CRUD.chapter_crud import create_chapter
+from db.CRUD.chapter_crud import create_chapter, get_chapter, update_chapter
 from agents.character_agent import CharacterAgent
 from agents.chapter_agent import ChapterAgent, ChapterOutlineItem
 
@@ -228,4 +228,159 @@ async def create_chapter_outline(payload: GenerateOutlineRequest):
             done = {"type": "done", "chapter_uids": created_uids}
             yield f"data: {json.dumps(done, ensure_ascii=False)}\n\n"
 
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+class GenerateChapterContentRequest(BaseModel):
+    chapter_uid: str
+    provider: str
+    conversation_messages: Optional[List[dict]] = None  # 可选的多轮 messages（list of {"role","content"}）
+    language: Optional[str] = None
+    save_threshold: Optional[int] = 200  # 达到多少字符后持久化一次（可调）
+    save_timeout_sec: Optional[float] = 1.0  # 没有新 token 时最终持久化前等待的超时时间
+
+@router.post("/create_chapter_content")
+async def create_chapter_content(payload: GenerateChapterContentRequest):
+    """
+    SSE 接口：对指定 chapter_uid 发起多轮/单轮流式生成正文。
+    - 支持传入 conversation_messages 以做多轮上下文；
+    - 在流式 token 到达时逐步回传 token（event type=token），并在累计达到 save_threshold 字符时将当前已生成内容写回 DB；
+    - 最终在生成完成后写入最终 content，并返回 done 事件包含 chapter_uid 与最终长度。
+    """
+    chapter = await get_chapter(payload.chapter_uid)
+    if not chapter:
+        raise ManuScriptValidationMsg(msg="Chapter not found", code=ResponseCode.CLIENT_ERROR.value)
+
+    novel_uid = getattr(chapter, "novel_uid", None)
+    if not novel_uid:
+        raise ManuScriptValidationMsg(msg="Chapter has no novel_uid", code=ResponseCode.CLIENT_ERROR.value)
+
+    characters = await list_characters(novel_uid)
+
+    async def event_generator():
+        token_queue: asyncio.Queue = asyncio.Queue()
+        buffer_parts: List[str] = []
+        last_saved_len = 0
+        save_threshold = payload.save_threshold or 200
+        save_lock = asyncio.Lock()
+
+        try:
+            agent = ChapterAgent(provider=payload.provider)
+        except Exception:
+            logger.exception("Failed to init ChapterAgent for chapter %s", payload.chapter_uid)
+            err = {"type": "error", "message": "Agent init failed"}
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+            return
+
+        # 回调：把 token 放入队列（不直接 yield，避免回调内 yield 问题）
+        async def on_token(piece: str):
+            await token_queue.put(piece)
+
+        # # 启动生成任务（并行消费 token 队列）
+        # 为兼容 ChapterAgent 要求，构造单个 outline_item 来表示当前 chapter
+        chapter_index = getattr(chapter, "chapter_idx", getattr(chapter, "index", 1))
+        outline_item = ChapterOutlineItem(
+            index=int(chapter_index),
+            title=getattr(chapter, "title", "") or "",
+            synopsis=getattr(chapter, "synopsis", "") or ""
+        )
+        print("发送给 ChapterAgent 的 入参:", {
+            "outline_items": [outline_item],
+            "all_characters": characters,
+            "chapter_index": chapter_index,
+            "prev_synopsis": getattr(chapter, "synopsis", "") or "",
+            "next_synopsis": None,
+            "language": payload.language,
+            "conversation_messages": payload.conversation_messages
+        })
+        gen_task = asyncio.create_task(
+            agent.stream_generate_chapter_content(
+                outline_items=[outline_item],
+                all_characters=characters,
+                chapter_index=outline_item.index,
+                prev_synopsis=None,
+                next_synopsis=None,
+                language=payload.language,
+                on_token=on_token,
+                conversation_messages=payload.conversation_messages
+            )
+        )
+
+        # 发送 start 事件
+        start = {"type": "start", "chapter_uid": payload.chapter_uid}
+        yield f"data: {json.dumps(start, ensure_ascii=False)}\n\n"
+
+        async def try_persist_if_needed():
+            nonlocal last_saved_len
+            async with save_lock:
+                cur_content = "".join(buffer_parts)
+                cur_len = len(cur_content)
+                if cur_len - last_saved_len >= save_threshold:
+                    # 保持 title/synopsis 不变，仅更新 content
+                    try:
+                        await update_chapter(payload.chapter_uid, chapter.title, cur_content, synopsis=getattr(chapter, "synopsis", None))
+                        last_saved_len = cur_len
+                        ev = {"type": "persist", "chapter_uid": payload.chapter_uid, "saved_len": cur_len}
+                        await token_queue.put(json.dumps({"__persist_event__": ev}, ensure_ascii=False))
+                    except Exception:
+                        logger.exception("Failed to persist interim content for chapter %s", payload.chapter_uid)
+
+        # 消费 token 队列并向客户端推送事件，同时进行增量持久化
+        finished = False
+        try:
+            while True:
+                try:
+                    piece = await asyncio.wait_for(token_queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    # 若生成任务已完成且队列空，则退出
+                    if gen_task.done():
+                        break
+                    continue
+
+                # special persist marker
+                if isinstance(piece, str) and piece.startswith('{"__persist_event__"'):
+                    # 从 queue 中接收到持久化内部事件标记，直接把它转为 SSE 事件
+                    try:
+                        obj = json.loads(piece)
+                        ev = obj.get("__persist_event__")
+                        if ev:
+                            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                        continue
+                    except Exception:
+                        pass
+
+                # 普通 token：回传并追加缓存
+                buffer_parts.append(piece)
+                # 逐 token 返回（前端可实时拼接）
+                token_ev = {"type": "token", "token": piece}
+                yield f"data: {json.dumps(token_ev, ensure_ascii=False)}\n\n"
+
+                # 异步检查是否需要持久化（不阻塞 token 返回）
+                # 这里直接创建任务，实际持久化通过 save_lock 序列化
+                asyncio.create_task(try_persist_if_needed())
+
+            # 等待生成任务完成并获取最终内容
+            try:
+                final_content = await asyncio.wait_for(gen_task, timeout=10)
+            except Exception:
+                # 若任务出错，记录并继续用现有缓冲作为 final_content
+                logger.exception("Generation task failed for chapter %s", payload.chapter_uid)
+                final_content = "".join(buffer_parts)
+
+            # 如果 final_content 非空且与缓冲一致则使用，否则以 final_content 为准
+            if final_content:
+                buffer_parts = [final_content]
+            final_text = "".join(buffer_parts)
+
+            # 最终持久化（确保写入 DB）
+            try:
+                await update_chapter(payload.chapter_uid, chapter.title, final_text, synopsis=getattr(chapter, "synopsis", None))
+            except Exception:
+                logger.exception("Failed to persist final content for chapter %s", payload.chapter_uid)
+
+            done = {"type": "done", "chapter_uid": payload.chapter_uid, "final_length": len(final_text)}
+            yield f"data: {json.dumps(done, ensure_ascii=False)}\n\n"
+        finally:
+            # 清理：若生成任务还未结束，取消它
+            if not gen_task.done():
+                gen_task.cancel()
     return StreamingResponse(event_generator(), media_type="text/event-stream")
