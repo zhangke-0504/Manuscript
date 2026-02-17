@@ -1,4 +1,3 @@
-# db/CRUD/chapter_crud.py
 import uuid
 import sqlite3
 from typing import List, Optional
@@ -15,13 +14,13 @@ async def _connect() -> aiosqlite.Connection:
     return conn
 
 
-async def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str) -> str:
+async def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str, synopsis: str = "") -> str:
     uid = str(uuid.uuid4())
     conn = await _connect()
     try:
         await conn.execute(
-            "INSERT INTO Chapters (uid, novel_uid, chapter_idx, title, content) VALUES (?, ?, ?, ?, ?)",
-            (uid, novel_uid, chapter_idx, title, content),
+            "INSERT INTO Chapters (uid, novel_uid, chapter_idx, title, content, synopsis) VALUES (?, ?, ?, ?, ?, ?)",
+            (uid, novel_uid, chapter_idx, title, content, synopsis),
         )
         await conn.commit()
         return uid
@@ -52,13 +51,19 @@ async def list_chapters(novel_uid: str) -> List[Chapter]:
         await conn.close()
 
 
-async def update_chapter(uid: str, title: str, content: str) -> bool:
+async def update_chapter(uid: str, title: str, content: str, synopsis: Optional[str] = None) -> bool:
     conn = await _connect()
     try:
-        cur = await conn.execute(
-            "UPDATE Chapters SET title=?, content=? WHERE uid=?",
-            (title, content, uid),
-        )
+        if synopsis is None:
+            cur = await conn.execute(
+                "UPDATE Chapters SET title=?, content=? WHERE uid=?",
+                (title, content, uid),
+            )
+        else:
+            cur = await conn.execute(
+                "UPDATE Chapters SET title=?, content=?, synopsis=? WHERE uid=?",
+                (title, content, synopsis, uid),
+            )
         await conn.commit()
         return cur.rowcount > 0
     finally:

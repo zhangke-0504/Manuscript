@@ -1,6 +1,6 @@
-# db/sqlite.py
 import sqlite3
 import os
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_FILE = os.path.join(BASE_DIR, "db", "novel.db")
@@ -8,23 +8,68 @@ DB_FILE = os.path.join(BASE_DIR, "db", "novel.db")
 def get_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+def get_now_sql_expr() -> str:
+    try:
+        off = datetime.now().astimezone().utcoffset()
+        if off is None:
+            raise ValueError("no utcoffset")
+        return "datetime('now','localtime')"
+    except Exception:
+        return "datetime('now','+28800 seconds')"
+
+def drop_trigger_if_exists(conn: sqlite3.Connection, name: str) -> None:
+    conn.execute(f"DROP TRIGGER IF EXISTS {name}")
+
+def recreate_insert_trigger(conn: sqlite3.Connection, table: str, now_sql: str) -> None:
+    trg_name = f"trg_{table}_ts_after_insert"
+    drop_trigger_if_exists(conn, trg_name)
+    conn.executescript(f"""
+    CREATE TRIGGER {trg_name}
+    AFTER INSERT ON {table}
+    FOR EACH ROW
+    WHEN NEW.created_at IS NULL OR NEW.updated_at IS NULL
+    BEGIN
+        UPDATE {table}
+        SET created_at = COALESCE(NEW.created_at, {now_sql}),
+            updated_at = COALESCE(NEW.updated_at, {now_sql})
+        WHERE uid = NEW.uid;
+    END;
+    """)
+
+def recreate_update_trigger(conn: sqlite3.Connection, table: str, now_sql: str) -> None:
+    trg_name = f"trg_{table}_ts_after_update"
+    drop_trigger_if_exists(conn, trg_name)
+    conn.executescript(f"""
+    CREATE TRIGGER {trg_name}
+    AFTER UPDATE ON {table}
+    FOR EACH ROW
+    BEGIN
+        UPDATE {table}
+        SET updated_at = {now_sql}
+        WHERE uid = NEW.uid;
+    END;
+    """)
 
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
 
-    # 小说表
+    # NovelConfig 表
     cur.execute("""
     CREATE TABLE IF NOT EXISTS NovelConfig (
         uid TEXT PRIMARY KEY,
         title TEXT,
         genre TEXT,
-        description TEXT
+        description TEXT,
+        created_at TEXT,
+        updated_at TEXT
     )
     """)
 
-    # 章节表
+    # Chapters 表
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Chapters (
         uid TEXT PRIMARY KEY,
@@ -32,11 +77,14 @@ def init_db():
         chapter_idx INTEGER,
         title TEXT,
         content TEXT,
+        synopsis TEXT DEFAULT '',
+        created_at TEXT,
+        updated_at TEXT,
         FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid)
     )
     """)
 
-    # 角色表
+    # Characters 表
     cur.execute("""
     CREATE TABLE IF NOT EXISTS Characters (
         uid TEXT PRIMARY KEY,
@@ -44,9 +92,17 @@ def init_db():
         name TEXT NOT NULL,
         description TEXT,
         is_main INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT,
         FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid)
     )
     """)
+
+    # 触发器：确保时间戳自动填充/更新（对新 DB 有效）
+    now_sql = get_now_sql_expr()
+    for table in ("NovelConfig", "Chapters", "Characters"):
+        recreate_insert_trigger(conn, table, now_sql)
+        recreate_update_trigger(conn, table, now_sql)
 
     conn.commit()
     conn.close()

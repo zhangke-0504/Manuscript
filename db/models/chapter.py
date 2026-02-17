@@ -1,4 +1,4 @@
-# db/models/chapter.py
+# ...existing code...
 from dataclasses import dataclass
 from typing import Optional
 
@@ -9,5 +9,6 @@ class Chapter:
     chapter_idx: int = 0
     title: str = ""
     content: str = ""
+    synopsis: str = ""  # 新增概要字段
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

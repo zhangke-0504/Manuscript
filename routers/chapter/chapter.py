@@ -128,6 +128,7 @@ async def list_chapter_endpoint(payload: ChapterListRequest):
     simplified: List[Dict] = [
         {
             "title": ch.title,
+            "synopsis": ch.synopsis,
             "chapter_uid": ch.uid,
             "chapter_idx": ch.chapter_idx,
             "created_at": ch.created_at,
