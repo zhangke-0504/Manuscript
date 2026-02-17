@@ -2,7 +2,7 @@ import asyncio
 import json
 import inspect
 from dataclasses import dataclass
-from typing import List, Optional, Callable, Awaitable, Union, Any, Set
+from typing import List, Optional, Callable, Awaitable, Union, Any, Set, Dict
 
 from db.models.character import Character
 # from db.models.chapter import Chapter
@@ -23,6 +23,7 @@ class ProviderAdapter:
     适配不同大语言模型供应商的适配器，统一提供以下功能：
         - stream_text：流式返回 token 并输出最终拼接的完整文本
         - text：非流式返回结果
+    支持传入多轮 messages（list of {role, content}）
     """
     def __init__(self, provider: str = "openai", openai_config: Optional[str] = None, deepseek_config: Optional[str] = None):
         self.provider = provider.lower()
@@ -43,13 +44,17 @@ class ProviderAdapter:
 
     async def stream_text(
         self,
-        prompt: str,
-        instructions: str,
-        on_token: Optional[Callable[[str], Union[None, Awaitable[None]]]] = None
+        prompt: Optional[str] = None,
+        instructions: Optional[str] = None,
+        on_token: Optional[Callable[[str], Union[None, Awaitable[None]]]] = None,
+        messages: Optional[List[Dict[str, str]]] = None
     ) -> str:
+        """
+        支持通过 messages 发起多轮对话流式请求；若 messages=None 则按 instructions+prompt 构造单轮。
+        """
         buffer: List[str] = []
         if isinstance(self.client, DeepSeekClient):
-            async for evt in self.client.async_stream_response(prompt=prompt, instructions=instructions, is_structured=False):
+            async for evt in self.client.async_stream_response(prompt=prompt, instructions=instructions, is_structured=False, messages=messages):
                 piece = ""
                 if hasattr(evt, "delta") and evt.delta:
                     piece = evt.delta if isinstance(evt.delta, str) else str(evt.delta)
@@ -60,8 +65,8 @@ class ProviderAdapter:
                 if piece:
                     buffer.append(piece)
                     await self._emit(on_token, piece)
-        elif isinstance(self.client, GPTClient):
-            async for evt in self.client.async_stream_response(prompt=prompt, instructions=instructions, text_format=None):
+        else:
+            async for evt in self.client.async_stream_response(prompt=prompt, instructions=instructions, text_format=None, messages=messages):
                 piece = ""
                 if hasattr(evt, "delta") and evt.delta:
                     piece = evt.delta if isinstance(evt.delta, str) else str(evt.delta)
@@ -75,11 +80,11 @@ class ProviderAdapter:
 
         return "".join(buffer)
 
-    async def text(self, prompt: str, instructions: str) -> str:
+    async def text(self, prompt: Optional[str] = None, instructions: Optional[str] = None, messages: Optional[List[Dict[str, str]]] = None) -> str:
         if isinstance(self.client, DeepSeekClient):
-            return await self.client.async_non_stream_response(prompt=prompt, instructions=instructions, is_structured=False)
-        elif isinstance(self.client, GPTClient):
-            return await self.client.async_non_stream_response(prompt=prompt, instructions=instructions, text_format=None)
+            return await self.client.async_non_stream_response(prompt=prompt, instructions=instructions, is_structured=False, messages=messages)
+        else:
+            return await self.client.async_non_stream_response(prompt=prompt, instructions=instructions, text_format=None, messages=messages)
 
 
 class ChapterAgent:
@@ -331,10 +336,12 @@ class ChapterAgent:
         prev_synopsis: Optional[str],
         next_synopsis: Optional[str],
         language: Optional[str] = None,
-        on_token: Optional[Callable[[str], Union[None, Awaitable[None]]]] = None
+        on_token: Optional[Callable[[str], Union[None, Awaitable[None]]]] = None,
+        conversation_messages: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """
-        流式生成单章正文。仅输出正文文本（不结构化）。
+        流式生成单章正文。支持多轮对话：若传入 conversation_messages（严格的 messages 列表），
+        则使用该 messages 发起请求并流式接收回复；否则按旧方式构造 system+user 单轮消息。
         """
         index_map = {item.index: item for item in outline_items}
         item = index_map.get(chapter_index)
@@ -375,7 +382,17 @@ class ChapterAgent:
         }
         prompt = json.dumps(user_payload, ensure_ascii=False)
 
-        content = await self.adapter.stream_text(prompt=prompt, instructions=instructions, on_token=on_token)
+        # 如果传入 conversation_messages（多轮），则直接使用它，否则构造 system+user 单轮
+        if conversation_messages:
+            messages = conversation_messages
+        else:
+            messages = [
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": prompt}
+            ]
+
+        # 使用 adapter 的流式接口，传入 messages
+        content = await self.adapter.stream_text(on_token=on_token, messages=messages)
         return content.strip()
 
     async def summarize_content(
@@ -402,9 +419,8 @@ class ChapterAgent:
         return (summary or "").strip()
 
 
-# ------------------------------
-# Demo / Tests
-# ------------------------------
+
+# 测试代码
 async def test_stream_directory(agent: ChapterAgent):
     # 模拟从 character 表读取
     characters = [
@@ -439,24 +455,55 @@ async def test_stream_directory(agent: ChapterAgent):
 
 
 async def test_stream_contents(agent: ChapterAgent, outline_items: List[ChapterOutlineItem], characters: List[Character]):
-    print("\n[流式] 生成4章内容：")
+    print("\n[流式 多轮] 生成4章内容（多轮示例）：")
     generated_contents: List[str] = []
+    # 我们在多轮示例中，将把每次 assistant 的正文回复追加到 messages 里，以便下一轮带上下文
+    messages: List[Dict[str, str]] = []
+
     for idx in range(1, 5):
         prev_synopsis: Optional[str] = None
         if idx > 1:
-            # 对上一章进行摘要（非流式）
             prev_synopsis = await agent.summarize_content(generated_contents[-1], target_length=120)
             print(f"\n[上一章摘要-第{idx-1}章]: {prev_synopsis}")
 
         next_synopsis: Optional[str] = None
         if idx + 1 <= len(outline_items):
-            next_synopsis = outline_items[idx].synopsis  # zero-based list, chapter index starts at 1
+            next_synopsis = outline_items[idx].synopsis
             print(f"[下一章概述-第{idx+1}章]: {next_synopsis}")
 
+        # 构造当前轮 system + user（或者在 messages 里保留之前的 messages，形成多轮）
+        index_map = {item.index: item for item in outline_items}
+        item = index_map.get(idx)
+        if not item:
+            raise ValueError(f"chapter_index {idx} not found")
+
+        lang_label = agent._lang_label(agent._detect_lang_from_characters(characters))
+        instructions = (
+            "你是一名专业小说写作代笔作者。请根据给定的章节标题、该章概述、所有人物信息，以及前后章节的概括（若有）创作本章正文。\n"
+            f"5) 最终输出语言：{lang_label}；\n"
+            "6) 只输出正文内容。"
+        )
+
+        user_payload = {
+            "chapter": {"index": item.index, "title": item.title, "synopsis": item.synopsis},
+            "adjacent": {"previous_synopsis": prev_synopsis or "", "next_synopsis": next_synopsis or ""},
+            "characters": agent._characters_to_compact_dicts(characters),
+            "style": {"language": lang_label, "tone": "叙事流畅、细节充实、情感丰沛"}
+        }
+        prompt = json.dumps(user_payload, ensure_ascii=False)
+
+        # 如果 messages 为空，则开始新会话（包含 system + user）；否则在已有 messages 后追加 user 询问以形成多轮
+        if not messages:
+            messages = [{"role": "system", "content": instructions}, {"role": "user", "content": prompt}]
+        else:
+            messages.append({"role": "user", "content": prompt})
+
         print(f"\n[流式输出正文-第{idx}章 开始]")
+
         async def on_token(piece: str):
             print(piece, end="", flush=True)
 
+        # 多轮：将 messages 传入，stream_text 会把 assistant 的流式输出返回为字符串
         content = await agent.stream_generate_chapter_content(
             outline_items=outline_items,
             all_characters=characters,
@@ -464,27 +511,26 @@ async def test_stream_contents(agent: ChapterAgent, outline_items: List[ChapterO
             prev_synopsis=prev_synopsis,
             next_synopsis=next_synopsis,
             language=None,
-            on_token=on_token
+            on_token=on_token,
+            conversation_messages=messages
         )
+        # 将 assistant 回复追加到 messages（以便下一轮）
+        messages.append({"role": "assistant", "content": content})
         generated_contents.append(content)
         print(f"\n[流式输出正文-第{idx}章 结束]\n")
 
-    print("[完成] 已生成4章内容。")
+    print("[完成] 已生成4章内容（多轮）。")
     return generated_contents
 
 
 if __name__ == "__main__":
     async def main():
-        # 选择供应商: "openai" 或 "deepseek"
-        provider = "deepseek"
+        provider = "openai"  # deepseek 或 openai
         agent = ChapterAgent(provider=provider)
 
-        # 1) 目录生成（流式结构化回调）
         outline_items, characters = await test_stream_directory(agent)
-
         print("outline_items:", outline_items)
         print("characters:", characters)
-        # 2) 正文生成（流式文本）+ 上下章摘要打印
         await test_stream_contents(agent, outline_items, characters)
 
     asyncio.run(main())

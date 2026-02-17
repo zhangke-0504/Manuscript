@@ -98,7 +98,7 @@ def init_db():
     )
     """)
 
-    # 触发器：确保时间戳自动填充/更新（对新 DB 有效）
+    # 触发器：确保时间戳自动填充/更新
     now_sql = get_now_sql_expr()
     for table in ("NovelConfig", "Chapters", "Characters"):
         recreate_insert_trigger(conn, table, now_sql)
