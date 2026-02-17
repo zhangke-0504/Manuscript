@@ -26,16 +26,16 @@ class CharacterAgent:
     - 流式结构化（新增）：每解析出一个角色就 yield 给前端
     """
 
-    def __init__(self, vendor: str = "deepseek", config_path: Optional[str] = None):
-        self.vendor = vendor.lower()
-        if self.vendor == "deepseek":
+    def __init__(self, provider: str = "deepseek", config_path: Optional[str] = None):
+        self.provider = provider.lower()
+        if self.provider == "deepseek":
             self.client = DeepSeekClient(config_path or "config/deepseek/config.yaml")
             self._use_pydantic_format = False
-        elif self.vendor == "openai":
+        elif self.provider == "openai":
             self.client = GPTClient(config_path or "config/openai/config.yaml")
             self._use_pydantic_format = True
         else:
-            raise ValueError("Unsupported vendor. Use 'deepseek' or 'openai'.")
+            raise ValueError("Unsupported provider. Use 'deepseek' or 'openai'.")
 
     def _build_instructions(self) -> str:
         # 要求严格 JSON，便于流式解析
@@ -78,7 +78,7 @@ class CharacterAgent:
         prompt = self._build_prompt(novel)
 
         raw: Any
-        if self.vendor == "openai":
+        if self.provider == "openai":
             raw = await self.client.async_non_stream_response(
                 prompt=prompt,
                 instructions=instructions,
@@ -113,7 +113,7 @@ class CharacterAgent:
         novel_uid = getattr(novel, "uid", "") or ""
 
         # 启动模型流
-        if self.vendor == "openai":
+        if self.provider == "openai":
             stream = self.client.async_stream_response(
                 prompt=prompt,
                 instructions=instructions,
@@ -333,9 +333,9 @@ class CharacterAgent:
 if __name__ == "__main__":
     from db.models.novel import Novel
 
-    async def demo_stream(vendor: str):
-        print(f"\n=== Vendor: {vendor} (streaming) ===")
-        agent = CharacterAgent(vendor=vendor)
+    async def demo_stream(provider: str):
+        print(f"\n=== Provider: {provider} (streaming) ===")
+        agent = CharacterAgent(provider=provider)
         demo_novel = Novel(
             uid="novel-demo-uid-001",
             title="山海镇妖录",

@@ -100,14 +100,13 @@ async def update_character_endpoint(payload: CharacterUpdateRequest):
 
 
 class DeleteCharacterRequest(BaseModel):
-    uid: str
-
-
+    uids: List[str]
 @router.post("/delete", response_model=CharacterResponse)
 async def delete_character_endpoint(payload: DeleteCharacterRequest):
-    deleted = await delete_character(payload.uid)
-    if not deleted:
-        raise ManuScriptValidationMsg(msg="Failed to delete character", code=ResponseCode.SERVER_ERROR.value)
+    for uid in payload.uids:
+        deleted = await delete_character(uid)
+        if not deleted:
+            raise ManuScriptValidationMsg(msg="Failed to delete character", code=ResponseCode.SERVER_ERROR.value)
     return CharacterResponse(
         code=ResponseCode.SUCCESS.value,
         msg="Character deleted successfully",

@@ -71,6 +71,10 @@ def register_routers(app: FastAPI) -> None:
     from routers.model_providers.model_providers import router as model_providers_router
     app.include_router(model_providers_router, prefix=f"{api_base}/model_providers", tags=["model_providers"])
 
+    # working_flow 路由
+    from routers.working_flow.working_flow import router as working_flow_router
+    app.include_router(working_flow_router, prefix=f"{api_base}/working_flow", tags=["working_flow"])
+
 # 实例化应用并注册路由
 setup_logging()
 app = create_app()

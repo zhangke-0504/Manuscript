@@ -457,7 +457,7 @@ async def test_stream_directory(agent: ChapterAgent):
 async def test_stream_contents(agent: ChapterAgent, outline_items: List[ChapterOutlineItem], characters: List[Character]):
     print("\n[流式 多轮] 生成4章内容（多轮示例）：")
     generated_contents: List[str] = []
-    # 我们在多轮示例中，将把每次 assistant 的正文回复追加到 messages 里，以便下一轮带上下文
+    # 在多轮示例中，将把每次 assistant 的正文回复追加到 messages 里，以便下一轮带上下文
     messages: List[Dict[str, str]] = []
 
     for idx in range(1, 5):

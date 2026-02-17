@@ -1,7 +1,6 @@
-# routers/novel/novel.py
 import logging
 from dataclasses import asdict
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -19,22 +18,20 @@ from utils.error import ManuScriptValidationMsg
 router = APIRouter()
 logger = logging.getLogger("novel_router")
 
-
 class NovelResponse(BaseModel):
     code: int
     msg: str
     data: Optional[Dict] = None
 
-
 class NovelCreate(BaseModel):
     title: str
     genre: str
     description: str
-
+    latest_chapter_uid: Optional[str] = None
 
 @router.post("/create", response_model=NovelResponse)
 async def create_novel_endpoint(payload: NovelCreate):
-    uid = await create_novel(payload.title, payload.genre, payload.description)
+    uid = await create_novel(payload.title, payload.genre, payload.description, payload.latest_chapter_uid)
     novel = await get_novel(uid)
     if not novel:
         raise ManuScriptValidationMsg(msg="Failed to create novel", code=ResponseCode.SERVER_ERROR.value)
@@ -44,10 +41,8 @@ async def create_novel_endpoint(payload: NovelCreate):
         data=asdict(novel),
     )
 
-
 class GetNovelRequest(BaseModel):
     uid: str
-
 
 @router.post("/get", response_model=NovelResponse)
 async def get_novel_endpoint(payload: GetNovelRequest):
@@ -60,17 +55,16 @@ async def get_novel_endpoint(payload: GetNovelRequest):
         data=asdict(novel),
     )
 
-
 class NovelUpdateRequest(BaseModel):
     uid: str
     title: str
     genre: str
     description: str
-
+    latest_chapter_uid: Optional[str] = None
 
 @router.post("/update", response_model=NovelResponse)
 async def update_novel_endpoint(payload: NovelUpdateRequest):
-    updated = await update_novel(payload.uid, payload.title, payload.genre, payload.description)
+    updated = await update_novel(payload.uid, payload.title, payload.genre, payload.description, payload.latest_chapter_uid)
     if not updated:
         raise ManuScriptValidationMsg(msg="Failed to update novel", code=ResponseCode.SERVER_ERROR.value)
     novel = await get_novel(payload.uid)
@@ -81,27 +75,22 @@ async def update_novel_endpoint(payload: NovelUpdateRequest):
         msg="Novel updated successfully",
         data=asdict(novel),
     )
-
-
 class DeleteNovelRequest(BaseModel):
-    uid: str
-
-
+    uids: List[str]
 @router.post("/delete", response_model=NovelResponse)
 async def delete_novel_endpoint(payload: DeleteNovelRequest):
-    deleted = await delete_novel(payload.uid)
-    if not deleted:
-        raise ManuScriptValidationMsg(msg="Failed to delete novel", code=ResponseCode.SERVER_ERROR.value)
+    for uid in payload.uids:
+        deleted = await delete_novel(uid)
+        if not deleted:
+            raise ManuScriptValidationMsg(msg="Failed to delete novel", code=ResponseCode.SERVER_ERROR.value)
     return NovelResponse(
         code=ResponseCode.SUCCESS.value,
         msg="Novel deleted successfully",
     )
 
-
 class NovelListRequest(BaseModel):
     page: int = Field(default=1, ge=1)
     size: int = Field(default=100, ge=1, le=1000)
-
 
 @router.post("/list", response_model=NovelResponse)
 async def list_novel_endpoint(payload: Optional[NovelListRequest] = None):

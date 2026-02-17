@@ -64,6 +64,7 @@ def init_db():
         title TEXT,
         genre TEXT,
         description TEXT,
+        latest_chapter_uid TEXT,
         created_at TEXT,
         updated_at TEXT
     )
@@ -80,7 +81,7 @@ def init_db():
         synopsis TEXT DEFAULT '',
         created_at TEXT,
         updated_at TEXT,
-        FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid)
+        FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid) ON DELETE CASCADE
     )
     """)
 
@@ -94,7 +95,7 @@ def init_db():
         is_main INTEGER NOT NULL DEFAULT 0,
         created_at TEXT,
         updated_at TEXT,
-        FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid)
+        FOREIGN KEY (novel_uid) REFERENCES NovelConfig(uid) ON DELETE CASCADE
     )
     """)
 

@@ -14,7 +14,7 @@ async def _connect() -> aiosqlite.Connection:
     return conn
 
 
-async def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str, synopsis: str = "") -> str:
+async def create_chapter(novel_uid: str, chapter_idx: int, title: str, content: str = "", synopsis: str = "") -> str:
     uid = str(uuid.uuid4())
     conn = await _connect()
     try:

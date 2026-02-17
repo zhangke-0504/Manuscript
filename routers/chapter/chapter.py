@@ -66,13 +66,14 @@ class ChapterUpdateRequest(BaseModel):
     uid: str
     title: Optional[str] = None
     content: Optional[str] = None
+    synopsis: Optional[str] = None
 
 
 @router.post("/update", response_model=ChapterResponse)
 async def update_chapter_endpoint(payload: ChapterUpdateRequest):
-    if not payload.title and not payload.content:
+    if not payload.title and not payload.content and not payload.synopsis:
         raise ManuScriptValidationMsg(
-            msg="Title and content cannot be empty at the same time",
+            msg="Title 、content and synopsis cannot be empty at the same time",
             code=ResponseCode.CLIENT_ERROR.value,
         )
     old_ch = await get_chapter(payload.uid)
@@ -81,8 +82,14 @@ async def update_chapter_endpoint(payload: ChapterUpdateRequest):
 
     title = payload.title if payload.title else old_ch.title
     content = payload.content if payload.content else old_ch.content
+    synopsis = payload.synopsis if payload.synopsis is not None else old_ch.synopsis
 
-    updated = await update_chapter(payload.uid, title, content)
+    updated = await update_chapter(
+        uid=payload.uid, 
+        title=title, 
+        content=content,
+        synopsis=synopsis
+    )
     if not updated:
         raise ManuScriptValidationMsg(msg="Failed to update chapter", code=ResponseCode.SERVER_ERROR.value)
 
@@ -97,14 +104,13 @@ async def update_chapter_endpoint(payload: ChapterUpdateRequest):
 
 
 class DeleteChapterRequest(BaseModel):
-    uid: str
-
-
+    uids: List[str]
 @router.post("/delete", response_model=ChapterResponse)
 async def delete_chapter_endpoint(payload: DeleteChapterRequest):
-    deleted = await delete_chapter(payload.uid)
-    if not deleted:
-        raise ManuScriptValidationMsg(msg="Failed to delete chapter", code=ResponseCode.SERVER_ERROR.value)
+    for uid in payload.uids:
+        deleted = await delete_chapter(uid)
+        if not deleted:
+            raise ManuScriptValidationMsg(msg="Failed to delete chapter", code=ResponseCode.SERVER_ERROR.value)
     return ChapterResponse(
         code=ResponseCode.SUCCESS.value,
         msg="Chapter deleted successfully",
