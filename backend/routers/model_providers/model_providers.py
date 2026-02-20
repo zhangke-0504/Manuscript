@@ -1,5 +1,6 @@
 # routers/model_providers/model_providers.py
 import os
+import sys
 import logging
 import asyncio
 import aiofiles
@@ -17,8 +18,21 @@ from utils.error import ManuScriptValidationMsg
 router = APIRouter()
 logger = logging.getLogger("model_providers_router")
 
-# 项目根目录（从 routers/model_providers/ 回到项目根）
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+def _get_root_dir() -> str:
+    """Return project root directory.
+
+    When running as a PyInstaller onefile exe, __file__ points into a temporary
+    extraction directory (e.g. _MEIxxxxx). In that case prefer resolving root
+    relative to the executable so config files are placed next to the project
+    structure (backend/config/...).
+    """
+    if getattr(sys, "frozen", False):
+        # sys.executable -> .../backend/dist/server.exe
+        # project root should be the backend folder (two levels up)
+        return os.path.dirname(os.path.dirname(sys.executable))
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+ROOT_DIR = _get_root_dir()
 
 class ProviderResponse(BaseModel):
     code: int

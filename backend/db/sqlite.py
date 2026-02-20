@@ -1,13 +1,16 @@
 import sqlite3
 import os
+import sys
 from datetime import datetime
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# Allow overriding data directory via environment variable (used in Electron packaging).
-DATA_DIR = os.getenv('BACKEND_DATA_DIR') or os.path.join(BASE_DIR, 'db')
-# Ensure data directory exists
-os.makedirs(DATA_DIR, exist_ok=True)
-DB_FILE = os.path.join(DATA_DIR, "novel.db")
+# When bundled by PyInstaller, use the executable directory as base so the DB
+# can be placed next to the exe. Otherwise use the repository layout.
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DB_FILE = os.path.join(BASE_DIR, "db", "novel.db")
 
 def get_connection():
     conn = sqlite3.connect(DB_FILE)

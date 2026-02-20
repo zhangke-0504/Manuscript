@@ -1,0 +1,2 @@
+2026-02-20 21:32:49,785 - INFO - app - Starting API on 127.0.0.1:8890 (env=dev, reload=False)
+INFO:     127.0.0.1:52479 - "GET / HTTP/1.1" 404 Not Found

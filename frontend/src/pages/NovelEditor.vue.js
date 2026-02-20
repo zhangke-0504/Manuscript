@@ -2,6 +2,7 @@ import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { listChapters, listCharacters, ssePost, updateChapter, updateCharacter, deleteChapters, deleteCharacters, getChapter, createChapter, createCharacter } from '../api';
 import AiDialog from '../components/AiDialog.vue';
+import { provider } from '../store/provider';
 import useI18n from '../i18n';
 import { pushToast } from '../utils/toast';
 import { showConfirm } from '../utils/confirm';
@@ -76,7 +77,7 @@ onMounted(load);
 async function genOutline() {
     generatingChapters.value = true;
     chapters.value = [];
-    await ssePost('/working_flow/create_chapter_outline', { novel_uid: uid, provider: 'deepseek' }, (data) => {
+    await ssePost('/working_flow/create_chapter_outline', { novel_uid: uid, provider: provider.value }, (data) => {
         if (data.type === 'chapter' && data.chapter) {
             const ch = data.chapter;
             chapters.value.push({ title: ch.title, synopsis: ch.synopsis, uid: ch.uid || ch.chapter_uid });
@@ -91,7 +92,7 @@ async function genCharacters() {
     generatingCharacters.value = true;
     characters.value = [];
     try {
-        await ssePost('/working_flow/create_characters', { novel_uid: uid, provider: 'deepseek' }, (data) => {
+        await ssePost('/working_flow/create_characters', { novel_uid: uid, provider: provider.value }, (data) => {
             if (data.type === 'character' && data.character) {
                 const cc = data.character;
                 characters.value.push({ name: cc.name, description: cc.description, uid: cc.uid || cc.character_uid });
@@ -330,21 +331,21 @@ if (__VLS_ctx.chapterOpen) {
         ...{ onChange: (...[$event]) => {
                 if (!(__VLS_ctx.chapterOpen))
                     return;
-                __VLS_ctx.changeChapterPage(__VLS_ctx.chapterPage);
+                __VLS_ctx.changeChapterPage(Number($event.target.value));
                 // @ts-ignore
-                [chapterPage, changeChapterPage,];
+                [changeChapterPage,];
             } },
         ...{ onKeydown: (...[$event]) => {
                 if (!(__VLS_ctx.chapterOpen))
                     return;
-                __VLS_ctx.changeChapterPage(__VLS_ctx.chapterPage);
+                __VLS_ctx.changeChapterPage(Number($event.target.value));
                 // @ts-ignore
-                [chapterPage, changeChapterPage,];
+                [changeChapterPage,];
             } },
         type: "number",
         ...{ style: {} },
+        value: (__VLS_ctx.chapterPage),
     });
-    (__VLS_ctx.chapterPage);
     __VLS_asFunctionalElement1(__VLS_intrinsics.ul, __VLS_intrinsics.ul)({
         ...{ style: {} },
     });
@@ -469,21 +470,21 @@ if (__VLS_ctx.charactersOpen) {
         ...{ onChange: (...[$event]) => {
                 if (!(__VLS_ctx.charactersOpen))
                     return;
-                __VLS_ctx.changeCharacterPage(__VLS_ctx.characterPage);
+                __VLS_ctx.changeCharacterPage(Number($event.target.value));
                 // @ts-ignore
-                [characterPage, changeCharacterPage,];
+                [changeCharacterPage,];
             } },
         ...{ onKeydown: (...[$event]) => {
                 if (!(__VLS_ctx.charactersOpen))
                     return;
-                __VLS_ctx.changeCharacterPage(__VLS_ctx.characterPage);
+                __VLS_ctx.changeCharacterPage(Number($event.target.value));
                 // @ts-ignore
-                [characterPage, changeCharacterPage,];
+                [changeCharacterPage,];
             } },
         type: "number",
         ...{ style: {} },
+        value: (__VLS_ctx.characterPage),
     });
-    (__VLS_ctx.characterPage);
     __VLS_asFunctionalElement1(__VLS_intrinsics.ul, __VLS_intrinsics.ul)({
         ...{ style: {} },
     });

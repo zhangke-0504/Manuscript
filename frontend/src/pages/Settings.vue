@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
+import { provider } from '../store/provider'
 import { getModelConfig, updateModelConfig } from '../api'
 import useI18n from '../i18n'
 import { pushToast } from '../utils/toast'
+import Toast from '../components/Toast.vue'
 
 const { t } = useI18n()
 
-const provider = ref('deepseek')
 const apiKey = ref('')
 
 async function load() {
@@ -19,8 +20,15 @@ onMounted(load)
 watch(provider, () => load())
 
 async function save() {
-  await updateModelConfig(provider.value, { api_key: apiKey.value })
-  pushToast(t('saved') || 'Saved', 'success')
+  try {
+    const res = await updateModelConfig(provider.value, { api_key: apiKey.value })
+    const msg = res?.msg || t('saved') || 'Saved'
+    pushToast(msg, 'success')
+  } catch (e) {
+    let errMsg = 'Save failed'
+    if (e && typeof e === 'object' && 'message' in e) errMsg = (e as any).message
+    pushToast(errMsg, 'error')
+  }
 }
 </script>
 
@@ -47,6 +55,8 @@ async function save() {
         <button class="btn-ghost" @click="() => provider = provider">Cancel</button>
       </div>
     </div>
+  
+    <Toast />
   </div>
 </template>
 

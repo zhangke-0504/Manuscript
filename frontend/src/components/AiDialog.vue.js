@@ -1,6 +1,7 @@
 import { ref, watch } from 'vue';
 import { ssePost } from '../api';
 import useI18n from '../i18n';
+import { provider } from '../store/provider';
 const props = defineProps();
 const emit = defineEmits(['insert', 'open', 'close']);
 const visible = ref(false);
@@ -72,7 +73,7 @@ async function send() {
     // ensure an assistant placeholder exists
     sess.messages.push({ role: 'assistant', content: '' });
     const assistantIndex = sess.messages.length - 1;
-    await ssePost('/working_flow/create_chapter_content', { chapter_uid: props.chapter_uid, provider: 'deepseek', conversation_messages: sess.messages }, (data) => {
+    await ssePost('/working_flow/create_chapter_content', { chapter_uid: props.chapter_uid, provider: provider.value, conversation_messages: sess.messages }, (data) => {
         if (!data)
             return;
         if (data.type === 'error') {

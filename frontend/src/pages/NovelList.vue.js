@@ -132,19 +132,19 @@ __VLS_asFunctionalElement1(__VLS_intrinsics.button, __VLS_intrinsics.button)({
 /** @type {__VLS_StyleScopedClasses['btn-ghost']} */ ;
 __VLS_asFunctionalElement1(__VLS_intrinsics.input)({
     ...{ onChange: (...[$event]) => {
-            __VLS_ctx.changePage(__VLS_ctx.page);
+            __VLS_ctx.changePage(Number($event.target.value));
             // @ts-ignore
-            [page, page, totalPages, changePage,];
+            [page, totalPages, changePage,];
         } },
     ...{ onKeydown: (...[$event]) => {
-            __VLS_ctx.changePage(__VLS_ctx.page);
+            __VLS_ctx.changePage(Number($event.target.value));
             // @ts-ignore
-            [page, changePage,];
+            [changePage,];
         } },
     type: "number",
     ...{ style: {} },
+    value: (__VLS_ctx.page),
 });
-(__VLS_ctx.page);
 __VLS_asFunctionalElement1(__VLS_intrinsics.div, __VLS_intrinsics.div)({
     ...{ class: "card-list" },
 });

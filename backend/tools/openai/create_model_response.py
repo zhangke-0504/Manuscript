@@ -1,6 +1,7 @@
 # ...existing code...
 import yaml
 import os
+import sys
 import asyncio
 import aiohttp
 import json
@@ -9,17 +10,52 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Type, AsyncIterable, Any, List
 import requests
 import base64
+from utils.config import Model_Providers
 
 class GPTClient:
     """OpenAI / DeepSeek  API 客户端工具类（支持结构化 / 非结构化 / 流式，支持多轮 messages 参数）"""
 
-    def __init__(self, config_path: str = "config/openai/config.yaml"):
-        self.config_info = self._load_config(config_path)
+    def __init__(self, config_path: Optional[str] = None):
+        if not config_path:
+            rel = Model_Providers.get("openai", "config/openai/config.yaml")
+            config_path = rel
+
+        if not os.path.isabs(config_path):
+            if getattr(sys, "frozen", False):
+                # project root should be backend (two levels up from exe)
+                project_root = os.path.dirname(os.path.dirname(sys.executable))
+            else:
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            config_path = os.path.join(project_root, config_path)
+
+        parent = os.path.dirname(config_path)
+        os.makedirs(parent, exist_ok=True)
+        if not os.path.exists(config_path):
+            # create placeholder with default OpenAI model
+            placeholder = {
+                "api_key": "xxxxxx",
+                "model": "gpt-4.1-mini",
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(placeholder, f, allow_unicode=True, sort_keys=False)
+
+        # Debug: log resolved config path and loaded api_key
+        try:
+            cfg = self._load_config(config_path)
+        except Exception as e:
+            print(f"OpenAI: failed to load config from {config_path}: {e}")
+            raise
+        print(f"OpenAI: using config_path={config_path}")
+        print(f"OpenAI: loaded api_key={(cfg.get('api_key'))}")
+        self.config_info = cfg
         self.api_key = self.config_info.get('api_key')
-        self.model = self.config_info.get('model', 'gpt-5')
+        self.model = self.config_info.get('model', 'gpt-4.1-mini')
         self.base_url = self.config_info.get('base_url', None)
 
         # 同时创建 sync 和 async 客户端
+        # Ensure OpenAI library sees the desired API key (some versions read from env)
+        if self.api_key:
+            os.environ['OPENAI_API_KEY'] = str(self.api_key)
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         self.async_client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 

@@ -1,5 +1,6 @@
 import yaml
 import os
+import sys
 import asyncio
 import aiohttp
 import json
@@ -8,26 +9,58 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Type, AsyncIterable, Any, List
 import requests
 import base64
+from utils.config import Model_Providers
 
 class DeepSeekClient:
     """OpenAI/DeepSeek API 客户端工具类，支持多轮 messages 参数"""
 
-    def __init__(self, config_path: str = "config/deepseek/config.yaml"):
+    def __init__(self, config_path: Optional[str] = None):
+        # Determine config path: prefer explicit, else use mapping from utils.config
+        if not config_path:
+            rel = Model_Providers.get("deepseek", "config/deepseek/config.yaml")
+            config_path = rel
+
+        # resolve relative path to project root (handle PyInstaller frozen exe)
+        if not os.path.isabs(config_path):
+            if getattr(sys, "frozen", False):
+                # sys.executable is .../backend/dist/server.exe; project root should be backend (two levels up)
+                project_root = os.path.dirname(os.path.dirname(sys.executable))
+            else:
+                # file is backend/tools/deepseek/create_model_response.py -> project root is three levels up (backend)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            config_path = os.path.join(project_root, config_path)
+
+        # Ensure parent dir exists and create placeholder if missing
+        parent = os.path.dirname(config_path)
+        os.makedirs(parent, exist_ok=True)
+        if not os.path.exists(config_path):
+            # create placeholder file with required DeepSeek defaults
+            placeholder = {
+                "api_key": "xxxxxx",
+                "model": "deepseek-chat",
+                "base_url": "https://api.deepseek.com",
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.safe_dump(placeholder, f, allow_unicode=True, sort_keys=False)
+
         self.config_info = self._load_config(config_path)
         self.api_key = self.config_info.get("api_key")
         self.model = self.config_info.get("model", "deepseek-chat")
-        self.base_url = self.config_info.get("base_url")
+        self.base_url = self.config_info.get("base_url", "https://api.deepseek.com")
+        # Ensure OpenAI/DeepSeek client sees API key via env if required
+        if self.api_key:
+            os.environ['OPENAI_API_KEY'] = str(self.api_key)
         self.async_client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url
         )
 
-    def _load_config(self, config_path: str) -> str:
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
         try:
             with open(config_path, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)
-                if not config:
-                    raise ValueError("配置文件为空")
+                config = yaml.safe_load(file) or {}
+                if not isinstance(config, dict):
+                    raise ValueError("配置文件格式错误，期望 mapping")
                 return config
         except Exception as e:
             raise RuntimeError(f"加载配置失败: {e}")

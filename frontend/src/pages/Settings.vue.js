@@ -1,9 +1,10 @@
 import { ref, onMounted, watch } from 'vue';
+import { provider } from '../store/provider';
 import { getModelConfig, updateModelConfig } from '../api';
 import useI18n from '../i18n';
 import { pushToast } from '../utils/toast';
+import Toast from '../components/Toast.vue';
 const { t } = useI18n();
-const provider = ref('deepseek');
 const apiKey = ref('');
 async function load() {
     const res = await getModelConfig(provider.value);
@@ -13,8 +14,17 @@ onMounted(load);
 // reload API key when provider selection changes
 watch(provider, () => load());
 async function save() {
-    await updateModelConfig(provider.value, { api_key: apiKey.value });
-    pushToast(t('saved') || 'Saved', 'success');
+    try {
+        const res = await updateModelConfig(provider.value, { api_key: apiKey.value });
+        const msg = res?.msg || t('saved') || 'Saved';
+        pushToast(msg, 'success');
+    }
+    catch (e) {
+        let errMsg = 'Save failed';
+        if (e && typeof e === 'object' && 'message' in e)
+            errMsg = e.message;
+        pushToast(errMsg, 'error');
+    }
 }
 const __VLS_ctx = {
     ...{},
@@ -84,6 +94,10 @@ __VLS_asFunctionalElement1(__VLS_intrinsics.button, __VLS_intrinsics.button)({
     ...{ class: "btn-ghost" },
 });
 /** @type {__VLS_StyleScopedClasses['btn-ghost']} */ ;
+const __VLS_0 = Toast;
+// @ts-ignore
+const __VLS_1 = __VLS_asFunctionalComponent1(__VLS_0, new __VLS_0({}));
+const __VLS_2 = __VLS_1({}, ...__VLS_functionalComponentArgsRest(__VLS_1));
 // @ts-ignore
 [provider, provider, provider, apiKey, save,];
 const __VLS_export = (await import('vue')).defineComponent({});

@@ -4,6 +4,7 @@ import sys
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 def setup_logging() -> None:
     """最简日志配置，避免重复处理器。"""
@@ -79,3 +80,21 @@ def register_routers(app: FastAPI) -> None:
 setup_logging()
 app = create_app()
 register_routers(app)
+def mount_static(app: FastAPI) -> None:
+    # Serve frontend static files. When running from source, static files are
+    # located at backend/dist/www; when frozen (exe in backend/dist), static
+    # files are next to the exe in backend/dist/www -> sys.executable parent.
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        static_dir = os.path.join(exe_dir, "www")
+    else:
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        static_dir = os.path.join(backend_dir, "dist", "www")
+
+    # Only mount if the directory exists
+    if os.path.isdir(static_dir):
+        app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    else:
+        logging.getLogger("app").warning("Static directory not found: %s", static_dir)
+
+mount_static(app)
