@@ -4,6 +4,9 @@ const messages: Record<string, Record<string, string>> = {
   zh: {
       saving: '保存中...',
       createPlaceholder: '创建资产',
+      createSuccess: '创建成功',
+      deleteSuccess: '删除成功',
+      updateSuccess: '更新成功',
       selectChapterPrompt: '请选择左侧章节进入编辑',
     assets: '资产',
     settings: '设置',
@@ -21,10 +24,14 @@ const messages: Record<string, Record<string, string>> = {
     characters: '角色',
     createSession: '新会话',
     aiDefaultPrompt: '请用中文生成该章节的正文，风格偏写实，长度目标约1500-2000字。',
+    editorPlaceholder: '在此编辑章节正文（支持中/英），保存请使用 Ctrl+S',
   },
   en: {
       saving: 'Saving...',
       createPlaceholder: 'Create Asset',
+      createSuccess: 'Created',
+      deleteSuccess: 'Deleted',
+      updateSuccess: 'Updated',
       selectChapterPrompt: 'Please select a chapter on the left to edit',
     assets: 'Assets',
     settings: 'Settings',
@@ -42,6 +49,7 @@ const messages: Record<string, Record<string, string>> = {
     characters: 'Characters',
     createSession: 'New Session',
     aiDefaultPrompt: 'Please generate the chapter body in English (realistic style), target length ~1500-2000 words.',
+    editorPlaceholder: 'Write chapter content here (supports EN/CN). Save with Ctrl+S',
   }
 }
 

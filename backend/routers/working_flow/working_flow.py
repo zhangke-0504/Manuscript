@@ -283,15 +283,15 @@ async def create_chapter_content(payload: GenerateChapterContentRequest):
             title=getattr(chapter, "title", "") or "",
             synopsis=getattr(chapter, "synopsis", "") or ""
         )
-        print("发送给 ChapterAgent 的 入参:", {
-            "outline_items": [outline_item],
-            "all_characters": characters,
-            "chapter_index": chapter_index,
-            "prev_synopsis": getattr(chapter, "synopsis", "") or "",
-            "next_synopsis": None,
-            "language": payload.language,
-            "conversation_messages": payload.conversation_messages
-        })
+        # print("发送给 ChapterAgent 的 入参:", {
+        #     "outline_items": [outline_item],
+        #     "all_characters": characters,
+        #     "chapter_index": chapter_index,
+        #     "prev_synopsis": getattr(chapter, "synopsis", "") or "",
+        #     "next_synopsis": None,
+        #     "language": payload.language,
+        #     "conversation_messages": payload.conversation_messages
+        # })
         gen_task = asyncio.create_task(
             agent.stream_generate_chapter_content(
                 outline_items=[outline_item],

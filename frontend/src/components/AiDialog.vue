@@ -4,7 +4,7 @@ import { ssePost } from '../api'
 import useI18n from '../i18n'
 
 const props = defineProps<{ chapter_uid?: string }>()
-const emit = defineEmits(['insert'])
+const emit = defineEmits(['insert','open','close'])
 
 const visible = ref(false)
 const sessions = ref<Array<any>>([])
@@ -38,8 +38,11 @@ function createSession() {
   saveSessions()
 }
 
-function deleteSession(idx: number) {
-  if (!confirm('Delete this AI session?')) return
+import { showConfirm } from '../utils/confirm'
+
+async function deleteSession(idx: number) {
+  const ok = await showConfirm('Delete this AI session?')
+  if (!ok) return
   sessions.value.splice(idx, 1)
   if (!sessions.value.length) createSession()
   if (selected.value >= sessions.value.length) selected.value = sessions.value.length - 1
@@ -52,7 +55,10 @@ function open() {
   if (!input.value) input.value = t('aiDefaultPrompt')
   visible.value = true
 }
-function close() { visible.value = false }
+function close() { visible.value = false; emit('close') }
+
+// notify parent when opened/closed
+watch(visible, (v)=>{ if(v) emit('open') })
 
 watch(sessions, saveSessions, { deep: true })
 
@@ -104,39 +110,59 @@ defineExpose({ open, close })
 </script>
 
 <template>
-  <div v-if="visible" style="position:fixed;right:12px;bottom:12px;width:480px;background:#fff;border:1px solid #ddd;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,0.08)">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <div style="flex:1">
-        <select v-model="selected">
+  <div v-if="visible" class="ai-dialog">
+    <div class="ai-header">
+      <div class="ai-sessions">
+        <select v-model="selected" class="ai-select">
           <option v-for="(s,idx) in sessions" :key="s.id" :value="idx">Session {{ idx + 1 }} - {{ new Date(s.created_at).toLocaleString() }}</option>
         </select>
-        <button @click="createSession" style="margin-left:8px">New</button>
-        <button @click="deleteSession(selected)" style="margin-left:8px">Delete</button>
+        <button class="btn-ghost" @click="createSession">New</button>
+        <button class="btn-ghost" @click="deleteSession(selected)">Delete</button>
       </div>
-      <div style="min-width:120px;text-align:right">
-        <span v-if="streaming">Streaming...</span>
-        <span v-else style="color:#666">Idle</span>
+      <div class="ai-status">
+        <span v-if="streaming" class="muted">Streaming...</span>
       </div>
     </div>
 
-    <div style="height:260px;overflow:auto;border:1px solid #f0f0f0;padding:8px">
-      <div v-if="errorMsg" style="color:crimson;margin-bottom:8px">{{ errorMsg }}</div>
-      <div v-for="(m,idx) in sessions[selected]?.messages || []" :key="idx" style="margin-bottom:8px">
-        <div v-if="m.role==='user'" style="text-align:right;color:#333">{{ m.content }}</div>
-        <div v-else style="color:#111;white-space:pre-wrap">{{ m.content }}</div>
-        <div v-if="m.role==='assistant'" style="text-align:right;margin-top:4px">
-          <button @click="insertToEditor(m.content)">Insert</button>
-          <button @click="copyToClipboard(m.content)" style="margin-left:6px">Copy</button>
+    <div class="ai-messages">
+      <div v-if="errorMsg" class="error">{{ errorMsg }}</div>
+      <div v-for="(m,idx) in sessions[selected]?.messages || []" :key="idx" :class="['ai-message', m.role]">
+        <div class="ai-bubble" :title="m.role==='assistant' ? 'Click to insert, double-click to copy' : ''" @click="m.role==='assistant' && insertToEditor(m.content)" @dblclick.prevent="m.role==='assistant' && copyToClipboard(m.content)">{{ m.content }}</div>
+        <div v-if="m.role==='assistant'" class="ai-actions">
+          <button class="btn-ghost" @click="insertToEditor(m.content)">Insert</button>
+          <button class="btn-ghost" @click="copyToClipboard(m.content)">Copy</button>
         </div>
       </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <textarea v-model="input" @keydown="(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }" style="flex:1;min-height:40px" placeholder="Type message, Enter to send, Shift+Enter newline" />
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <button @click="send">Send</button>
-        <button @click="close">Close</button>
+    <div class="ai-input">
+      <textarea v-model="input" @keydown="(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }" placeholder="Type message, Enter to send, Shift+Enter newline"></textarea>
+      <div class="ai-controls">
+        <button class="btn-primary" @click="send">Send</button>
+        <button class="btn-ghost" @click="close">Close</button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.ai-dialog{ /* inline panel, parent controls placement */ width:100%; display:flex; flex-direction:column; padding:12px; box-shadow: -6px 0 30px rgba(0,0,0,0.5); z-index:1200; height:100%; background: var(--panel); border-left:1px solid rgba(255,255,255,0.02); color:var(--text) }
+.ai-header{ display:flex; justify-content:space-between; align-items:center; gap:8px }
+.ai-sessions{ display:flex; gap:8px; align-items:center }
+.ai-select{ min-width:220px; background:transparent; color:var(--text); border:1px solid rgba(255,255,255,0.03); padding:6px 8px; border-radius:6px }
+.ai-select option{ color: var(--muted); background: var(--panel) }
+.ai-status{ min-width:120px; text-align:right }
+.ai-messages{ flex:1; overflow:auto; border:1px solid rgba(255,255,255,0.02); padding:8px; margin-top:8px; background: rgba(0,0,0,0.05) }
+.ai-message{ margin-bottom:12px; display:flex; flex-direction:column }
+.ai-message.user{ align-items:flex-end }
+.ai-message.assistant{ align-items:flex-start }
+.ai-bubble{ max-width:86%; padding:10px 12px; border-radius:10px; background: rgba(255,255,255,0.04); color:var(--text); box-shadow:0 2px 6px rgba(0,0,0,0.08); white-space:pre-wrap; cursor: pointer }
+.ai-message.user .ai-bubble{ background:linear-gradient(90deg,var(--accent),var(--accent-2)); color:white }
+.ai-actions{ margin-top:6px }
+.ai-input{ display:flex; gap:8px; margin-top:8px; align-items:flex-end }
+.ai-input textarea{ flex:1; min-height:80px; padding:8px; border:1px solid rgba(255,255,255,0.03); border-radius:6px; resize:vertical; background:transparent; color:var(--text) }
+.ai-controls{ display:flex; flex-direction:column; gap:8px }
+.ai-controls .btn-ghost, .ai-actions .btn-ghost{ background: rgba(255,255,255,0.02); color: var(--text); border:1px solid rgba(255,255,255,0.03) }
+.muted{ color:var(--muted) }
+.error{ color:crimson; margin-bottom:8px }
+</style>

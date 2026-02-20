@@ -6,13 +6,13 @@ const { t, locale, setLocale } = useI18n()
 
 <template>
   <div id="app">
-    <header style="display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #eee">
-      <h2 style="margin:0">Manuscript</h2>
+    <header class="header">
+      <div class="logo">Manuscript</div>
       <nav style="margin-left:12px">
-        <router-link to="/" style="margin-right:8px">{{ t('assets') }}</router-link>
-        <router-link to="/settings">{{ t('settings') }}</router-link>
+        <router-link to="/" class="navlink">{{ t('assets') }}</router-link>
+        <router-link to="/settings" class="navlink">{{ t('settings') }}</router-link>
       </nav>
-      <div style="margin-left:auto">
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
         <select v-model="locale">
           <option value="zh">中文</option>
           <option value="en">English</option>

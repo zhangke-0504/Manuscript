@@ -398,7 +398,7 @@ class ChapterAgent:
                     {"role": "system", "content": instructions},
                     {"role": "user", "content": prompt}
             ]
-        print("流式入参 messages:", json.dumps(messages, ensure_ascii=False))
+        # print("流式入参 messages:", json.dumps(messages, ensure_ascii=False))
         # 使用 adapter 的流式接口，传入 messages
         content = await self.adapter.stream_text(on_token=on_token, messages=messages)
         return content.strip()

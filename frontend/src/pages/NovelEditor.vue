@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { listChapters, listCharacters, ssePost, updateChapter, updateCharacter, deleteChapters, deleteCharacters, getChapter, getCharacter, createChapter, createCharacter } from '../api'
 import AiDialog from '../components/AiDialog.vue'
 import useI18n from '../i18n'
+import Pagination from '../components/Pagination.vue'
+import { pushToast } from '../utils/toast'
+import { showConfirm } from '../utils/confirm'
+import ConfirmModal from '../components/ConfirmModal.vue'
+import Toast from '../components/Toast.vue'
 
 const { t } = useI18n()
 
@@ -35,6 +40,7 @@ const saving = ref(false)
 const savedMessage = ref('')
 
 const aiRef = ref<any>(null)
+const aiVisible = ref(false)
 
 function chapterTotalPages() {
   return Math.max(1, Math.ceil(chapterTotal.value / chapterSize.value))
@@ -130,7 +136,7 @@ async function selectChapter(ch: any) {
 }
 
 async function saveChapter() {
-  if (!selectedChapter.value) return alert('No chapter selected')
+  if (!selectedChapter.value) { pushToast('No chapter selected','error'); return }
   saving.value = true
   savedMessage.value = ''
   try {
@@ -138,15 +144,17 @@ async function saveChapter() {
     savedMessage.value = 'Saved'
     setTimeout(() => (savedMessage.value = ''), 2000)
     await load()
-  } catch (e: any) {
-    alert('Save failed: ' + (e?.message || e))
+    } catch (e: any) {
+    pushToast('Save failed: ' + (e?.message || e), 'error')
   } finally {
     saving.value = false
   }
 }
 
 function openAi() {
-  if (aiRef.value && aiRef.value.open) aiRef.value.open()
+  // ensure AI panel is mounted and visible, then open it
+  aiVisible.value = true
+  nextTick(() => { if (aiRef.value && aiRef.value.open) aiRef.value.open() })
 }
 
 function handleAiInsert(content: string) {
@@ -158,7 +166,8 @@ async function editChapterTitle(ch: any) {
   const t = prompt('New chapter title', ch.title)
   if (!t) return
   await updateChapter({ uid: ch.uid, title: t })
-  load()
+  await load()
+  pushToast('Chapter updated', 'success')
 }
 
 async function editCharacter(c: any) {
@@ -166,23 +175,26 @@ async function editCharacter(c: any) {
   const desc = prompt('Description', c.description)
   if (!name && !desc) return
   await updateCharacter({ uid: c.uid, name, description: desc })
-  load()
+  await load()
+  pushToast('Character updated', 'success')
 }
 
 async function removeChapters() {
   const uids = chapters.value.filter((c: any) => c._checked).map((c: any) => c.uid)
-  if (!uids.length) return alert('select')
-  if (!confirm('Delete selected chapters?')) return
+  if (!uids.length) { pushToast('select', 'error'); return }
+  if (!await showConfirm('Delete selected chapters?')) return
   await deleteChapters(uids)
-  load()
+  await load()
+  pushToast('Deleted chapters', 'success')
 }
 
 async function removeCharacters() {
   const uids = characters.value.filter((c: any) => c._checked).map((c: any) => c.uid)
-  if (!uids.length) return alert('select')
-  if (!confirm('Delete selected characters?')) return
+  if (!uids.length) { pushToast('select', 'error'); return }
+  if (!await showConfirm('Delete selected characters?')) return
   await deleteCharacters(uids)
-  load()
+  await load()
+  pushToast('Deleted characters', 'success')
 }
 
 async function createNewChapter() {
@@ -199,7 +211,7 @@ async function createNewChapter() {
       if (found) selectChapter(found)
     }
   } catch (e: any) {
-    alert('Create chapter failed: ' + (e?.message || e))
+    pushToast('Create chapter failed: ' + (e?.message || e), 'error')
   }
 }
 
@@ -210,7 +222,7 @@ async function createNewCharacter() {
     await createCharacter({ novel_uid: uid, name, description: '' })
     await load()
   } catch (e: any) {
-    alert('Create character failed: ' + (e?.message || e))
+    pushToast('Create character failed: ' + (e?.message || e), 'error')
   }
 }
 
@@ -228,24 +240,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-  <div style="display:flex;gap:12px">
-    <aside style="width:320px;border-right:1px solid #eee;padding-right:12px">
+  <div class="layout">
+    <aside class="sidebar">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <h3 style="margin:0">{{ t('chapters') }}</h3>
         <button @click="chapterOpen = !chapterOpen">{{ chapterOpen ? '▾' : '▸' }}</button>
       </div>
       <div v-if="chapterOpen" style="margin-top:8px">
         <div style="display:flex;gap:8px;margin-bottom:8px">
-            <button @click="genOutline" :disabled="generating">{{ t('aiGenerate') }} 大纲</button>
-            <button @click="createNewChapter">创建</button>
-            <button @click="removeChapters">删除</button>
+          <button class="btn-primary" @click="genOutline" :disabled="generatingChapters">{{ t('aiGenerate') }} 大纲</button>
+          <button class="btn-ghost" @click="createNewChapter">创建</button>
+          <button class="btn-ghost" @click="removeChapters">删除</button>
         </div>
-        <div v-if="generatingChapters" style="color:#666">Generating...</div>
+        <div v-if="generatingChapters" style="color:var(--muted)"><span class="spinner"></span> Generating...</div>
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
           <div style="font-size:12px;color:#666">Page {{ chapterPage }} / {{ chapterTotalPages() }}</div>
           <button @click="changeChapterPage(chapterPage - 1)">Prev</button>
           <button @click="changeChapterPage(chapterPage + 1)">Next</button>
-          <input type="number" style="width:70px" :value="chapterPage" @change="changeChapterPage(Number($event.target.value))" />
+          <input type="number" style="width:70px" :value="chapterPage" @change="changeChapterPage(Number($event.target.value))" @keydown.enter.prevent="changeChapterPage(Number($event.target.value))" />
         </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in chapters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5">
@@ -269,16 +281,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       </div>
       <div v-if="charactersOpen" style="margin-top:8px">
         <div style="display:flex;gap:8px;margin-bottom:8px">
-          <button @click="genCharacters">{{ t('aiGenerate') }} 角色</button>
-          <button @click="createNewCharacter">创建</button>
-          <button @click="removeCharacters">删除</button>
+          <button class="btn-primary" @click="genCharacters">{{ t('aiGenerate') }} 角色</button>
+          <button class="btn-ghost" @click="createNewCharacter">创建</button>
+          <button class="btn-ghost" @click="removeCharacters">删除</button>
         </div>
-        <div v-if="generatingCharacters" style="color:#666">Generating...</div>
+        <div v-if="generatingCharacters" style="color:var(--muted)"><span class="spinner"></span> Generating...</div>
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
           <div style="font-size:12px;color:#666">Page {{ characterPage }} / {{ characterTotalPages() }}</div>
           <button @click="changeCharacterPage(characterPage - 1)">Prev</button>
           <button @click="changeCharacterPage(characterPage + 1)">Next</button>
-          <input type="number" style="width:70px" :value="characterPage" @change="changeCharacterPage(Number($event.target.value))" />
+          <input type="number" style="width:70px" :value="characterPage" @change="changeCharacterPage(Number($event.target.value))" @keydown.enter.prevent="changeCharacterPage(Number($event.target.value))" />
         </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in characters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5;display:flex;justify-content:space-between;align-items:center">
@@ -297,27 +309,37 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       </div>
     </aside>
 
-    <section style="flex:1;padding-left:12px;display:flex;flex-direction:column">
+    <section class="content">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <h3>编辑章节</h3>
         <div style="display:flex;gap:8px;align-items:center">
-          <span v-if="selectedLoading" style="color:#666">{{ t('loading') }}</span>
-          <span v-if="saving" style="color:#666">{{ t('saving') || 'Saving...' }}</span>
-          <span v-if="savedMessage" style="color:green">{{ savedMessage }}</span>
-          <button @click="openAi">{{ t('aiGenerate') }}</button>
-          <button @click="saveChapter" :disabled="saving">{{ t('save') }} (Ctrl+S)</button>
-          <button @click="() => router.push({ name: 'novel-list' })">{{ t('return') }}</button>
+          <span v-if="selectedLoading" class="muted">{{ t('loading') }}</span>
+          <span v-if="saving" class="muted">{{ t('saving') || 'Saving...' }}</span>
+          <span v-if="savedMessage" style="color:var(--accent)">{{ savedMessage }}</span>
+          <button class="btn-primary" @click="openAi">{{ t('aiGenerate') }}</button>
+          <button class="btn-ghost" @click="saveChapter" :disabled="saving">{{ t('save') }} (Ctrl+S)</button>
+          <button class="btn-ghost" @click="() => router.push({ name: 'novel-list' })">{{ t('return') }}</button>
         </div>
       </div>
 
       <div v-if="!selectedChapter" style="margin-top:12px;color:#666">{{ t('selectChapterPrompt') }}</div>
 
-      <div v-else style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
-        <input v-model="editorTitle" style="font-size:18px;padding:8px" />
-        <textarea v-model="editorContent" style="flex:1;min-height:320px;padding:12px;font-family:inherit" />
+      <div v-else style="margin-top:12px;display:flex;flex-direction:column;gap:8px;flex:1">
+        <div class="editor-row" style="display:flex;gap:12px;align-items:stretch;flex:1">
+          <div class="editor-panel" style="flex:1;display:flex;flex-direction:column;gap:8px">
+            <input v-model="editorTitle" style="font-size:18px;padding:8px;background:transparent;color:var(--text);border:1px solid rgba(255,255,255,0.03);border-radius:6px" />
+            <textarea v-model="editorContent" :placeholder="t('editorPlaceholder')" style="flex:1;min-height:calc(100vh - 260px);padding:12px;font-family:inherit;background:rgba(255,255,255,0.03);color:var(--text);border:1px solid rgba(255,255,255,0.03);border-radius:6px"></textarea>
+          </div>
+        </div>
       </div>
-
-      <AiDialog ref="aiRef" :chapter_uid="selectedChapter?.uid" @insert="handleAiInsert" />
     </section>
+
+    <!-- AI panel on the right (sibling column) -->
+    <div class="ai-panel" v-if="aiVisible">
+      <AiDialog ref="aiRef" :chapter_uid="selectedChapter?.uid" @insert="handleAiInsert" @open="aiVisible = true" @close="aiVisible = false" />
+    </div>
+
+    <ConfirmModal />
+    <Toast />
   </div>
 </template>
