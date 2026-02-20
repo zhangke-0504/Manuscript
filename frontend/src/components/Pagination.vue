@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineProps, defineEmits } from 'vue'
+import { computed } from 'vue'
 const props = defineProps({ page: { type:Number, default:1 }, pageCount: { type:Number, default:1 } })
 const emit = defineEmits(['update:page'])
 

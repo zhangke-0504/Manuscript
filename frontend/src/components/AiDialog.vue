@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, defineEmits, defineExpose } from 'vue'
+import { ref, watch } from 'vue'
 import { ssePost } from '../api'
 import useI18n from '../i18n'
 

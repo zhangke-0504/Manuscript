@@ -257,7 +257,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <div style="font-size:12px;color:#666">Page {{ chapterPage }} / {{ chapterTotalPages() }}</div>
           <button @click="changeChapterPage(chapterPage - 1)">Prev</button>
           <button @click="changeChapterPage(chapterPage + 1)">Next</button>
-          <input type="number" style="width:70px" :value="chapterPage" @change="changeChapterPage(Number($event.target.value))" @keydown.enter.prevent="changeChapterPage(Number($event.target.value))" />
+          <input type="number" style="width:70px" v-model.number="chapterPage" @change="changeChapterPage(chapterPage)" @keydown.enter.prevent="changeChapterPage(chapterPage)" />
         </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in chapters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5">
@@ -290,7 +290,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <div style="font-size:12px;color:#666">Page {{ characterPage }} / {{ characterTotalPages() }}</div>
           <button @click="changeCharacterPage(characterPage - 1)">Prev</button>
           <button @click="changeCharacterPage(characterPage + 1)">Next</button>
-          <input type="number" style="width:70px" :value="characterPage" @change="changeCharacterPage(Number($event.target.value))" @keydown.enter.prevent="changeCharacterPage(Number($event.target.value))" />
+          <input type="number" style="width:70px" v-model.number="characterPage" @change="changeCharacterPage(characterPage)" @keydown.enter.prevent="changeCharacterPage(characterPage)" />
         </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in characters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5;display:flex;justify-content:space-between;align-items:center">

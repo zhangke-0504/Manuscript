@@ -87,7 +87,7 @@ function openNovel(uid: string) {
         <div class="muted">Page {{ page }} / {{ totalPages() }}</div>
         <button class="btn-ghost" @click="changePage(page - 1)" :disabled="page<=1">Prev</button>
         <button class="btn-ghost" @click="changePage(page + 1)" :disabled="page>=totalPages()">Next</button>
-        <input type="number" style="width:70px" :value="page" @change="changePage(Number($event.target.value))" @keydown.enter.prevent="changePage(Number($event.target.value))" />
+        <input type="number" style="width:70px" v-model.number="page" @change="changePage(page)" @keydown.enter.prevent="changePage(page)" />
       </div>
     </div>
 
