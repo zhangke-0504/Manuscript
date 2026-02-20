@@ -13,8 +13,17 @@ const uid = String(route.params.uid || '')
 
 const chapters = ref<any[]>([])
 const characters = ref<any[]>([])
+// pagination state for chapters
+const chapterPage = ref(1)
+const chapterSize = ref(10)
+const chapterTotal = ref(0)
+// pagination state for characters
+const characterPage = ref(1)
+const characterSize = ref(10)
+const characterTotal = ref(0)
 const loading = ref(false)
-const generating = ref(false)
+const generatingChapters = ref(false)
+const generatingCharacters = ref(false)
 const chapterOpen = ref(true)
 const charactersOpen = ref(true)
 
@@ -27,15 +36,42 @@ const savedMessage = ref('')
 
 const aiRef = ref<any>(null)
 
+function chapterTotalPages() {
+  return Math.max(1, Math.ceil(chapterTotal.value / chapterSize.value))
+}
+
+function characterTotalPages() {
+  return Math.max(1, Math.ceil(characterTotal.value / characterSize.value))
+}
+
+function changeChapterPage(p: number) {
+  const max = chapterTotalPages()
+  if (p < 1) p = 1
+  if (p > max) p = max
+  chapterPage.value = p
+  load()
+}
+
+function changeCharacterPage(p: number) {
+  const max = characterTotalPages()
+  if (p < 1) p = 1
+  if (p > max) p = max
+  characterPage.value = p
+  load()
+}
+
 async function load() {
   loading.value = true
-  const cRes = await listChapters(uid)
-  // normalize chapter items to always have `uid`
+  // chapters with pagination
+  const cRes = await listChapters(uid, chapterPage.value, chapterSize.value)
   const rawChapters = cRes?.data?.items || []
+  chapterTotal.value = cRes?.data?.total || 0
   chapters.value = rawChapters.map((it: any) => ({ ...it, uid: it.uid || it.chapter_uid || (it.chapter && it.chapter.uid) }))
-  const chRes = await listCharacters(uid)
-  // normalize character items to always have `uid`
+
+  // characters with pagination
+  const chRes = await listCharacters(uid, characterPage.value, characterSize.value)
   const rawChars = chRes?.data?.items || []
+  characterTotal.value = chRes?.data?.total || 0
   characters.value = rawChars.map((it: any) => ({ ...it, uid: it.uid || it.character_uid || (it.character && it.character.uid) }))
   loading.value = false
 }
@@ -43,24 +79,37 @@ async function load() {
 onMounted(load)
 
 async function genOutline() {
-  generating.value = true
+  generatingChapters.value = true
   chapters.value = []
   await ssePost('/working_flow/create_chapter_outline', { novel_uid: uid, provider: 'deepseek' }, (data) => {
     if (data.type === 'chapter' && data.chapter) {
       const ch = data.chapter
       chapters.value.push({ title: ch.title, synopsis: ch.synopsis, uid: ch.uid || ch.chapter_uid })
     }
-  }, () => generating.value = false)
+  }, async () => {
+    generatingChapters.value = false
+    // refresh current page
+    await load()
+  })
 }
 
 async function genCharacters() {
+  generatingCharacters.value = true
   characters.value = []
-  await ssePost('/working_flow/create_characters', { novel_uid: uid, provider: 'deepseek' }, (data) => {
-    if (data.type === 'character' && data.character) {
-      const cc = data.character
-      characters.value.push({ name: cc.name, description: cc.description, uid: cc.uid || cc.character_uid })
+    try {
+      await ssePost('/working_flow/create_characters', { novel_uid: uid, provider: 'deepseek' }, (data) => {
+        if (data.type === 'character' && data.character) {
+          const cc = data.character
+          characters.value.push({ name: cc.name, description: cc.description, uid: cc.uid || cc.character_uid })
+        }
+      }, async () => {
+        generatingCharacters.value = false
+        await load()
+      })
+    } catch (e) {
+      generatingCharacters.value = false
+      throw e
     }
-  })
 }
 
 async function selectChapter(ch: any) {
@@ -191,7 +240,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             <button @click="createNewChapter">创建</button>
             <button @click="removeChapters">删除</button>
         </div>
-        <div v-if="generating" style="color:#666">Generating...</div>
+        <div v-if="generatingChapters" style="color:#666">Generating...</div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:12px;color:#666">Page {{ chapterPage }} / {{ chapterTotalPages() }}</div>
+          <button @click="changeChapterPage(chapterPage - 1)">Prev</button>
+          <button @click="changeChapterPage(chapterPage + 1)">Next</button>
+          <input type="number" style="width:70px" :value="chapterPage" @change="changeChapterPage(Number($event.target.value))" />
+        </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in chapters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5">
             <div style="display:flex;justify-content:space-between;align-items:center">
@@ -217,6 +272,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           <button @click="genCharacters">{{ t('aiGenerate') }} 角色</button>
           <button @click="createNewCharacter">创建</button>
           <button @click="removeCharacters">删除</button>
+        </div>
+        <div v-if="generatingCharacters" style="color:#666">Generating...</div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:12px;color:#666">Page {{ characterPage }} / {{ characterTotalPages() }}</div>
+          <button @click="changeCharacterPage(characterPage - 1)">Prev</button>
+          <button @click="changeCharacterPage(characterPage + 1)">Next</button>
+          <input type="number" style="width:70px" :value="characterPage" @change="changeCharacterPage(Number($event.target.value))" />
         </div>
         <ul style="padding:0;list-style:none">
           <li v-for="c in characters" :key="c.uid" style="padding:8px;border-bottom:1px solid #f5f5f5;display:flex;justify-content:space-between;align-items:center">

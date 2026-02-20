@@ -37,7 +37,8 @@ async def get_novel(novel_uid: str) -> Optional[Novel]:
 async def list_novels() -> List[Novel]:
     conn = await _connect()
     try:
-        cur = await conn.execute("SELECT * FROM NovelConfig")
+        # Order novels by updated_at descending (most recently updated first)
+        cur = await conn.execute("SELECT * FROM NovelConfig ORDER BY updated_at DESC")
         rows = await cur.fetchall()
         return [Novel(**r) for r in rows]
     finally:

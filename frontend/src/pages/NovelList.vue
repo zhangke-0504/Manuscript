@@ -9,23 +9,39 @@ const { t } = useI18n()
 const novels = ref<any[]>([])
 const loading = ref(false)
 const deleting = ref(false)
+const page = ref(1)
+const size = ref(10)
+const total = ref(0)
 const router = useRouter()
 
 async function load() {
   loading.value = true
-  const res = await listNovels(1, 100)
+  const res = await listNovels(page.value, size.value)
   novels.value = res?.data?.items || []
+  total.value = res?.data?.total || 0
   loading.value = false
 }
 
 onMounted(load)
 
+function totalPages() {
+  return Math.max(1, Math.ceil(total.value / size.value))
+}
+
+function changePage(p: number) {
+  const max = totalPages()
+  if (p < 1) p = 1
+  if (p > max) p = max
+  page.value = p
+  load()
+}
+
 async function onCreate() {
   const title = prompt('Novel title')
   if (!title) return
   const res = await createNovel({ title, genre: '未知', description: '' })
-  const uid = res?.data?.uid
-  if (uid) router.push({ name: 'novel-editor', params: { uid } })
+  // After creating an asset, stay on the asset list page and refresh
+  await load()
 }
 
 async function onDeleteSelected() {
@@ -49,10 +65,16 @@ function openNovel(uid: string) {
 
 <template>
   <div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
       <button @click="onDeleteSelected" :disabled="loading || deleting">{{ t('deleteSelected') }}</button>
       <span v-if="loading">{{ t('loading') }}</span>
       <span v-if="deleting" style="color:crimson">{{ t('deleting') }}</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <div style="font-size:12px;color:#666">Page {{ page }} / {{ totalPages() }}</div>
+        <button @click="changePage(page - 1)" :disabled="page<=1">Prev</button>
+        <button @click="changePage(page + 1)" :disabled="page>=totalPages()">Next</button>
+        <input type="number" style="width:70px" :value="page" @change="(e) => changePage(Number($event.target.value))" />
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px">

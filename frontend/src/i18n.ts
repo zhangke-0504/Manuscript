@@ -3,7 +3,7 @@ import { reactive, computed } from 'vue'
 const messages: Record<string, Record<string, string>> = {
   zh: {
       saving: '保存中...',
-      createPlaceholder: '创作小说',
+      createPlaceholder: '创建资产',
       selectChapterPrompt: '请选择左侧章节进入编辑',
     assets: '资产',
     settings: '设置',
@@ -24,7 +24,7 @@ const messages: Record<string, Record<string, string>> = {
   },
   en: {
       saving: 'Saving...',
-      createPlaceholder: 'Create Novel',
+      createPlaceholder: 'Create Asset',
       selectChapterPrompt: 'Please select a chapter on the left to edit',
     assets: 'Assets',
     settings: 'Settings',

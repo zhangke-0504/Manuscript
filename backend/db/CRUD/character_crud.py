@@ -42,7 +42,8 @@ async def get_character(char_uid: str) -> Optional[Character]:
 async def list_characters(novel_uid: str) -> List[Character]:
     conn = await _connect()
     try:
-        cur = await conn.execute("SELECT * FROM Characters WHERE novel_uid=?", (novel_uid,))
+        # Order characters by creation time ascending (earlier first)
+        cur = await conn.execute("SELECT * FROM Characters WHERE novel_uid=? ORDER BY created_at ASC", (novel_uid,))
         rows = await cur.fetchall()
         return [Character(**r) for r in rows]
     finally:

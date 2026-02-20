@@ -41,8 +41,9 @@ async def get_chapter(ch_uid: str) -> Optional[Chapter]:
 async def list_chapters(novel_uid: str) -> List[Chapter]:
     conn = await _connect()
     try:
+        # Order chapters by creation time ascending (earlier first)
         cur = await conn.execute(
-            "SELECT * FROM Chapters WHERE novel_uid=? ORDER BY chapter_idx",
+            "SELECT * FROM Chapters WHERE novel_uid=? ORDER BY created_at ASC",
             (novel_uid,),
         )
         rows = await cur.fetchall()

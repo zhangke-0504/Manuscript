@@ -1,5 +1,39 @@
-# Vue 3 + TypeScript + Vite
+# Manuscript — Frontend
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+This is the frontend application for Manuscript, a novel-focused writing editor for long-form storytelling.
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+Built with:
+- Vue 3
+- TypeScript
+- Vite
+
+Key features:
+- Rich text editing and long-form document support
+- Scene and chapter management for novel structure
+- Real-time preview and export options
+
+Local development
+
+Install dependencies:
+
+```bash
+cd frontend
+npm install
+```
+
+Run dev server:
+
+```bash
+npm run dev
+```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+Notes
+
+- This project uses Vue 3 `<script setup>` single-file components. See the Vue docs for more details: https://v3.vuejs.org/
+- Configuration and environment variables are managed via Vite. Check `vite.config.ts` and `.env` files as needed.
