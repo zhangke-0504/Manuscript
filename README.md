@@ -1,3 +1,58 @@
+# Manuscript — Quick Start
+
+简体中文 / English (双语)
+
+## 快速开始（普通用户）
+
+1. 将 `backend/dist` 整个文件夹与本仓库根目录下的 `start.bat` 一并放到某台 Windows 电脑上。
+2. 双击 `start.bat`：它会启动后端服务并自动在默认浏览器打开项目首页。
+3. 打开页面后，进入 "API Key Settings"，选择供应商（`deepseek` 或 `openai`），粘贴你的 API Key，然后点击 Save。
+   - DeepSeek 配置会保存到：`backend/config/deepseek/config.yaml`
+   - OpenAI 配置会保存到：`backend/config/openai/config.yaml`
+4. 保存成功后你会在页面右下角看到成功提示。随后在任意小说页面点击“生成角色”等功能即可使用该供应商服务。
+
+说明：如果你偏好手动配置，可以直接编辑对应的 YAML 文件（路径见上），格式示例：
+
+```yaml
+# DeepSeek 示例
+api_key: sk-xxxxx
+model: deepseek-chat
+base_url: https://api.deepseek.com
+```
+
+```yaml
+# OpenAI 示例
+api_key: sk-xxxxx
+model: gpt-4.1-mini
+```
+
+## Quick Start (English)
+
+1. Put the `backend/dist` folder and the `start.bat` (in this repo root) on a Windows machine.
+2. Double-click `start.bat` — it will start the backend and open the app in your default browser.
+3. In the app open "API Key Settings", choose a provider (`deepseek` or `openai`), paste your API key and click Save.
+   - DeepSeek config is saved to: `backend/config/deepseek/config.yaml`
+   - OpenAI config is saved to: `backend/config/openai/config.yaml`
+4. After save you will see a toast confirming success. Then use the generation features on any novel page.
+
+Manual config example (YAML):
+
+```yaml
+# DeepSeek example
+api_key: sk-xxxxx
+model: deepseek-chat
+base_url: https://api.deepseek.com
+```
+
+```yaml
+# OpenAI example
+api_key: sk-xxxxx
+model: gpt-4.1-mini
+```
+
+## Notes
+- This distribution includes a packaged backend executable (`server.exe`) that serves the frontend static files — users do not need to install Python or other runtimes.
+- If you prefer a custom deployment or need an installer, contact the maintainer.
 # Manuscript
 
 中文：
